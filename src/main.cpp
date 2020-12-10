@@ -229,7 +229,7 @@ void setup()
   attachInterrupt(0, acsel, RISING);
   attachInterrupt(1, gesture, RISING);
 
-  Serial1.begin(9600);        // bluetooth module connected to Serial1 
+  Serial1.begin(9600);         // bluetooth module connected to Serial1 
   
   
   
