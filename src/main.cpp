@@ -375,8 +375,8 @@ void readCh()
 
 void n1Mode()
 {
-  void sendNRF();
-  digitalWrite(LED1, !digitalRead(LED1));
+  sendNRF();
+  digitalWrite(LED1, !digitalRead(LED1)); // just blink to understand, that it is working
 }
 void n2Mode()
 {
