@@ -35,7 +35,7 @@
 #include <Adafruit_MPU6050.h>
 
 //7) MP3 module
-#include "DFRobotDFPlayerMini.h"
+#include <DFPlayer_Mini_Mp3.h>
 
 // first switches connection
 int8_t first_sw[8] = { A14, A13, A12, A11, A10, A9, A8, A7 };
@@ -208,6 +208,10 @@ void setup()
   strip.fill(mCOLOR(YELLOW));
   strip.show();
   Serial.begin(115200);
+  Serial2.begin(9600);
+  mp3_set_serial(Serial2);
+  mp3_set_volume(20);
+  mp3_play (1);
   if (!mpu.begin())
     Serial.println("Sensor init failed");
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3C for 128x32
@@ -230,8 +234,8 @@ void setup()
   attachInterrupt(1, gesture, RISING);
 
   Serial1.begin(9600);         // bluetooth module connected to Serial1 
-  
-  
+  delay(5000);
+  mp3_stop ();
   
   
 }
