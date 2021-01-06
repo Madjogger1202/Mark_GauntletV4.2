@@ -18,7 +18,7 @@
 #include <Adafruit_SSD1306.h> // Adafruit librari works 50/50, it depends on display driver (yes, they can hava same names, bt diffrent drivers)
 
 //2) RGB Led panel.       LEDs 2812 (8-bit panel) 
-#include <microLED.h>
+#include <FastLED.h>
 
 //3) NRF24L01+ 
 #include <nRF24L01.h>
@@ -28,7 +28,8 @@
 #include "Adafruit_APDS9960.h"
 
 //5) LoRa radio sx1278
-#include <RH_RF95.h>
+#include <LoRa.h>
+
 
 //6) MPU6050 gyro + acsel
 #include <Adafruit_Sensor.h>
@@ -69,9 +70,20 @@ int8_t buttons[4] = { A3, A1, A0, A2 };
 #define WS_LED 45
 
 
-LEDdata leds[8];
-microLED strip(leds, 8, WS_LED); 
-#define ORDER_GRB 
+
+#define LED_PIN     45
+#define NUM_LEDS    8
+#define BRIGHTNESS  20
+#define LED_TYPE    WS2811
+#define COLOR_ORDER GRB
+CRGB leds[NUM_LEDS];
+
+#define UPDATES_PER_SECOND 100 
+
+CRGBPalette16 currentPalette;
+TBlendType    currentBlending;
+extern CRGBPalette16 myRedWhiteBluePalette;
+extern const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM;
 
 RF24 radio(NRF_CE, NRF_CSN);
 
@@ -144,8 +156,11 @@ void sendNRF();
 void sendBL();
 void sendLoRa();   // will reliase it soon
 void displayInfo();
-
-
+void FillLEDsFromPaletteColors( uint8_t colorIndex);
+void ChangePalettePeriodically();
+void SetupTotallyRandomPalette();
+void SetupBlackAndWhiteStripedPalette();
+void SetupPurpleAndGreenPalette();
 // at all it is possible to create up to 256 diffrent modes,
 // but if you need more - connect mode counter with channel counter (maybe partly)
 void n1Mode();
@@ -170,7 +185,33 @@ void acsel()
 void gesture()
 {
   mainData.irqAPDC=true;
+
 }
+
+const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM =
+{
+    CRGB::Red,
+    CRGB::Gray, // 'white' is too bright compared to red and blue
+    CRGB::Blue,
+    CRGB::Black,
+    
+    CRGB::Red,
+    CRGB::Gray,
+    CRGB::Blue,
+    CRGB::Black,
+    
+    CRGB::Red,
+    CRGB::Red,
+    CRGB::Gray,
+    CRGB::Gray,
+    CRGB::Blue,
+    CRGB::Blue,
+    CRGB::Black,
+    CRGB::Black
+};
+
+
+
 
 void setup() 
 {
@@ -182,7 +223,9 @@ void setup()
     pinMode(buttons[i], INPUT_PULLUP);
   pinMode(LED1, OUTPUT);
   pinMode(LED2, OUTPUT);
-
+  analogWrite(LED1, 10);
+  analogWrite(LED2, 100);
+  
   pinMode(JOY_X, INPUT);
   pinMode(JOY_Y, INPUT);
 
@@ -202,13 +245,13 @@ void setup()
   
   pinMode(WS_LED, OUTPUT);
 
-  strip.setBrightness(130);  
-  strip.clear();
-  strip.show(); 
-  strip.fill(mCOLOR(YELLOW));
-  strip.show();
   Serial.begin(115200);
   Serial2.begin(9600);
+  
+    if (!LoRa.begin(433E6)) {
+    Serial.println("Starting LoRa failed!");
+    while (1);
+  }
   mp3_set_serial(Serial2);
   mp3_set_volume(20);
   mp3_play (1);
@@ -219,11 +262,15 @@ void setup()
     for(;;); // Don't proceed, loop forever
   }
   display.display();
+  display.clearDisplay();
+  
+  display.display();
   if(!apds.begin())
     Serial.println("failed to initialize device! Please check your wiring.");
   apds.enableProximity(true);
   apds.enableGesture(true);
-  radio.begin();                                      
+  if(!radio.begin())
+      Serial.println("nrf err");
   radio.setChannel(100);                               
   radio.setDataRate     (RF24_1MBPS);                   
   radio.setPALevel      (RF24_PA_HIGH);                 
@@ -234,21 +281,30 @@ void setup()
   attachInterrupt(1, gesture, RISING);
 
   Serial1.begin(9600);         // bluetooth module connected to Serial1 
-  delay(5000);
-  mp3_stop ();
+  delay(2000);
+  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+    FastLED.setBrightness(  BRIGHTNESS );
+    
+    currentPalette = RainbowColors_p;
+    currentBlending = LINEARBLEND;
+ // mp3_stop ();
   
   
 }
 
 void loop()
 {
-  void readMode();
-  void readCh();
-  void readAcs();
-  void readJoy();
-  void readPot();
-  void readButtons();
-  void displayInfo();
+ readMode();
+ readCh();
+ readAcs();
+ readJoy();
+ readPot();
+ readButtons();
+
+ 
+ 
+ displayInfo();
+
   switch (mainData.mode)
   {
   case 0:
@@ -265,6 +321,15 @@ void loop()
     break;
   
   }
+  ChangePalettePeriodically();
+    
+    static uint8_t startIndex = 0;
+    startIndex = startIndex + 1; /* motion speed */
+    
+    FillLEDsFromPaletteColors( startIndex);
+    
+    FastLED.show();
+    FastLED.delay(1000 / UPDATES_PER_SECOND);
 }
 
 
@@ -293,7 +358,7 @@ void readPot()
 
 void readButtons()   // buttons : 1) 1; 2)0; 3)1; 4)1;   and mainData.button == 1011 
 {
-  mainData.button = digitalRead(buttons[0])*1000+digitalRead(buttons[1])*100+digitalRead(buttons[0])*10+digitalRead(buttons[0]);
+  mainData.button = !digitalRead(A1)*1000+!digitalRead(A2)*100+!digitalRead(A3)*10+!digitalRead(A0);
   return;
 }
 
@@ -333,9 +398,9 @@ void displayInfo()
   display.setTextSize(1);             
   display.setTextColor(WHITE);       
   display.setCursor(0, 0);            
-  display.print(mainData.x_acs);    
+  display.print(mainData.channel);    
   display.print("  ");          
-  display.print(mainData.y_acs);
+  display.print(mainData.mode);
   display.print("  ");
   display.println(mainData.z_acs);      
   display.print(mainData.button);
@@ -344,35 +409,35 @@ void displayInfo()
   display.print("  ");
   display.print(mainData.joyX);
   display.print("  ");
-  display.println(mainData.joyY);
+  display.println(mainData.potData);
+  display.display();
 }
 
 
 void readMode()
 {
-  bitWrite(mainData.mode, 0, digitalRead(first_sw[0]));
-  bitWrite(mainData.mode, 1, digitalRead(first_sw[1]));
-  bitWrite(mainData.mode, 2, digitalRead(first_sw[2]));
-  bitWrite(mainData.mode, 3, digitalRead(first_sw[3]));
-
-  bitWrite(mainData.mode, 4, digitalRead(first_sw[4]));
-  bitWrite(mainData.mode, 5, digitalRead(first_sw[5]));
-  bitWrite(mainData.mode, 6, digitalRead(first_sw[6]));
-  bitWrite(mainData.mode, 7, digitalRead(first_sw[7]));
+  bitWrite(mainData.mode, 0, (!digitalRead(A14)));
+  bitWrite(mainData.mode, 1, (!digitalRead(A13)));
+  bitWrite(mainData.mode, 2, (!digitalRead(A12)));
+  bitWrite(mainData.mode, 3, (!digitalRead(A11)));
+  bitWrite(mainData.mode, 4, (!digitalRead(A10)));
+  bitWrite(mainData.mode, 5, (!digitalRead(A9)));
+  bitWrite(mainData.mode, 6, (!digitalRead(A8)));
+  bitWrite(mainData.mode, 7, (!digitalRead(A7)));
   return;
 }
 
 void readCh()
 {
-  bitWrite(mainData.channel, 0, digitalRead(second_sw[0]));
-  bitWrite(mainData.channel, 1, digitalRead(second_sw[1]));
-  bitWrite(mainData.channel, 2, digitalRead(second_sw[2]));
-  bitWrite(mainData.channel, 3, digitalRead(second_sw[3]));
+  bitWrite(mainData.channel, 0, !(digitalRead(second_sw[0])));
+  bitWrite(mainData.channel, 1, !(digitalRead(second_sw[1])));
+  bitWrite(mainData.channel, 2, !(digitalRead(second_sw[2])));
+  bitWrite(mainData.channel, 3, !(digitalRead(second_sw[3])));
 
-  bitWrite(mainData.channel, 4, digitalRead(second_sw[4]));
-  bitWrite(mainData.channel, 5, digitalRead(second_sw[5]));
-  bitWrite(mainData.channel, 6, digitalRead(second_sw[6]));
-  bitWrite(mainData.channel, 7, digitalRead(second_sw[7]));
+  bitWrite(mainData.channel, 4, !(digitalRead(second_sw[4])));
+  bitWrite(mainData.channel, 5, !(digitalRead(second_sw[5])));
+  bitWrite(mainData.channel, 6, !(digitalRead(second_sw[6])));
+  bitWrite(mainData.channel, 7, !(digitalRead(second_sw[7])));
   return;
 }
 
@@ -427,3 +492,71 @@ void n12Mode()
 
 }
 
+void FillLEDsFromPaletteColors( uint8_t colorIndex)
+{
+    uint8_t brightness = 255;
+    
+    for( int i = 0; i < NUM_LEDS; i++) {
+        leds[i] = ColorFromPalette( currentPalette, colorIndex, brightness, currentBlending);
+        colorIndex += 3;
+    }
+}
+
+void ChangePalettePeriodically()
+{
+    uint8_t secondHand = (millis() / 1000) % 60;
+    static uint8_t lastSecond = 99;
+    
+    if( lastSecond != secondHand) {
+        lastSecond = secondHand;
+        if( secondHand ==  0)  { currentPalette = RainbowColors_p;         currentBlending = LINEARBLEND; }
+        if( secondHand == 10)  { currentPalette = RainbowStripeColors_p;   currentBlending = NOBLEND;  }
+        if( secondHand == 15)  { currentPalette = RainbowStripeColors_p;   currentBlending = LINEARBLEND; }
+        if( secondHand == 20)  { SetupPurpleAndGreenPalette();             currentBlending = LINEARBLEND; }
+        if( secondHand == 25)  { SetupTotallyRandomPalette();              currentBlending = LINEARBLEND; }
+        if( secondHand == 30)  { SetupBlackAndWhiteStripedPalette();       currentBlending = NOBLEND; }
+        if( secondHand == 35)  { SetupBlackAndWhiteStripedPalette();       currentBlending = LINEARBLEND; }
+        if( secondHand == 40)  { currentPalette = CloudColors_p;           currentBlending = LINEARBLEND; }
+        if( secondHand == 45)  { currentPalette = PartyColors_p;           currentBlending = LINEARBLEND; }
+        if( secondHand == 50)  { currentPalette = myRedWhiteBluePalette_p; currentBlending = NOBLEND;  }
+        if( secondHand == 55)  { currentPalette = myRedWhiteBluePalette_p; currentBlending = LINEARBLEND; }
+    }
+}
+
+// This function fills the palette with totally random colors.
+void SetupTotallyRandomPalette()
+{
+    for( int i = 0; i < 16; i++) {
+        currentPalette[i] = CHSV( random8(), 255, random8());
+    }
+}
+
+// This function sets up a palette of black and white stripes,
+// using code.  Since the palette is effectively an array of
+// sixteen CRGB colors, the various fill_* functions can be used
+// to set them up.
+void SetupBlackAndWhiteStripedPalette()
+{
+    // 'black out' all 16 palette entries...
+    fill_solid( currentPalette, 16, CRGB::Black);
+    // and set every fourth one to white.
+    currentPalette[0] = CRGB::White;
+    currentPalette[4] = CRGB::White;
+    currentPalette[8] = CRGB::White;
+    currentPalette[12] = CRGB::White;
+    
+}
+
+// This function sets up a palette of purple and green stripes.
+void SetupPurpleAndGreenPalette()
+{
+    CRGB purple = CHSV( HUE_PURPLE, 255, 255);
+    CRGB green  = CHSV( HUE_GREEN, 255, 255);
+    CRGB black  = CRGB::Black;
+    
+    currentPalette = CRGBPalette16(
+                                   green,  green,  black,  black,
+                                   purple, purple, black,  black,
+                                   green,  green,  black,  black,
+                                   purple, purple, black,  black );
+}
