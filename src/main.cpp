@@ -12,7 +12,7 @@
 #include <Arduino.h>      // why not...
 #include <Wire.h>
 #include <SPI.h>
-// i have to make all modules work, so i will use some libraris to make life easier
+// i have to make all modules work, so i will use some libraries to make life easier
 //1) Display.      im using 0.96 oled from china, it is not standart at dimentions, bt i like how it looks in final designs :)
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h> // Adafruit librari works 50/50, it depends on display driver (yes, they can hava same names, bt diffrent drivers)
@@ -42,7 +42,7 @@
 int8_t first_sw[8] = { A14, A13, A12, A11, A10, A9, A8, A7 };
 
 // second switches connection
-int8_t second_sw[8] = { 38, 37, 36, 35, 34, A6, 32, A15 };
+int8_t second_sw[8] = { 38, 37, 36, 35, 34, 33, 32, A15 };
 
 // buttons connection
 int8_t buttons[4] = { A3, A1, A0, A2 };
@@ -250,10 +250,9 @@ void setup()
   
     if (!LoRa.begin(433E6)) {
     Serial.println("Starting LoRa failed!");
-    while (1);
   }
   mp3_set_serial(Serial2);
-  mp3_set_volume(20);
+  mp3_set_volume(25);
   mp3_play (1);
   if (!mpu.begin())
     Serial.println("Sensor init failed");
