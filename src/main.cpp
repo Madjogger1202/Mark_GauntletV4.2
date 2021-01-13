@@ -146,6 +146,8 @@ struct radioData
 
 } telemetriData;
 
+uint8_t prevMode;  // to track switches
+
 void readMode();
 void readCh();
 void readAcs();
@@ -242,6 +244,11 @@ void setup()
   pinMode(R_LED, OUTPUT);
   pinMode(G_LED, OUTPUT);
   pinMode(B_LED, OUTPUT);
+  analogWrite(R_LED, 100);
+  analogWrite(G_LED, 100);
+  analogWrite(B_LED, 100);
+  
+  
   
   pinMode(WS_LED, OUTPUT);
 
@@ -382,10 +389,34 @@ void sendNRF()
   radio.write(&telemetriData, sizeof(telemetriData));
 }
 
-void sendBL(String inp)
+void sendBL()
 {
-  Serial1.print(inp);
+  telemetriData.stable = mainData.stable;
+  telemetriData.x_acs = mainData.x_acs;
+  telemetriData.y_acs = mainData.y_acs;
+  telemetriData.z_acs = mainData.z_acs;
+
+  telemetriData.mode = mainData.mode;
+  telemetriData.channel = mainData.channel;
+
+  telemetriData.button = mainData.button;
+  
+  telemetriData.potData = mainData.potData;
+  telemetriData.joyX = mainData.joyX;
+  telemetriData.joyY = mainData.joyY;
+  Serial1.println(telemetriData.x_acs);
+  Serial1.println(telemetriData.y_acs);
+  Serial1.println(telemetriData.z_acs);
+  Serial1.println(telemetriData.mode);
+  Serial1.println(telemetriData.channel);
+  Serial1.println(telemetriData.button);
+  Serial1.println(telemetriData.potData);
+  Serial1.println(telemetriData.joyX);
+  Serial1.println(telemetriData.joyY);
+  Serial1.println();
+  Serial1.println();
   return;
+
 }
 
 
@@ -423,6 +454,40 @@ void readMode()
   bitWrite(mainData.mode, 5, (!digitalRead(A9)));
   bitWrite(mainData.mode, 6, (!digitalRead(A8)));
   bitWrite(mainData.mode, 7, (!digitalRead(A7)));
+  if(mainData.mode != prevMode)
+  {
+    switch (mainData.mode)
+    {
+    case 1:
+      mp3_play(2);
+      break;
+    case 2:
+      mp3_play(3);
+      break;
+    case 3:
+      mp3_play(4);
+      break;
+    case 4:
+      mp3_play(5);
+      break;
+    case 5:
+      mp3_play(6);
+      break;
+    case 6:
+      mp3_play(7);
+      break;
+    case 7:
+      mp3_play(8);
+      break;
+    case 8:
+      mp3_play(9);
+      break;
+    case 9:
+      mp3_play(10);
+      break;
+    }
+    prevMode=mainData.mode;
+  }
   return;
 }
 
@@ -448,11 +513,34 @@ void n1Mode()
 }
 void n2Mode()
 {
-
+  sendBL();
 }
 void n3Mode()
 {
+  telemetriData.stable = mainData.stable;
+  telemetriData.x_acs = mainData.x_acs;
+  telemetriData.y_acs = mainData.y_acs;
+  telemetriData.z_acs = mainData.z_acs;
 
+  telemetriData.mode = mainData.mode;
+  telemetriData.channel = mainData.channel;
+
+  telemetriData.button = mainData.button;
+  
+  telemetriData.potData = mainData.potData;
+  telemetriData.joyX = mainData.joyX;
+  telemetriData.joyY = mainData.joyY;
+  Serial.println(telemetriData.x_acs);
+  Serial.println(telemetriData.y_acs);
+  Serial.println(telemetriData.z_acs);
+  Serial.println(telemetriData.mode);
+  Serial.println(telemetriData.channel);
+  Serial.println(telemetriData.button);
+  Serial.println(telemetriData.potData);
+  Serial.println(telemetriData.joyX);
+  Serial.println(telemetriData.joyY);
+  Serial.println();
+  Serial.println();
 }
 void n4Mode()
 {
